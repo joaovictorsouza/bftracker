@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=8
+http-ece>=1.2
