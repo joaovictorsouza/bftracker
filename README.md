@@ -73,6 +73,10 @@ ou pelo `.env`.
 
 As chaves VAPID são geradas automaticamente no primeiro início.
 
+Em 25/11/2026 o envio foi validado de ponta a ponta no Chrome para macOS (aplicativo → serviço
+de push do Google → notificação no navegador). Android e iPhone ainda não foram testados em
+aparelho.
+
 ### E-mail
 
 Informe servidor, porta, usuário, senha e remetente SMTP. No Gmail use `smtp.gmail.com`,
