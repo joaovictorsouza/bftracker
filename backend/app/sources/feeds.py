@@ -1,5 +1,5 @@
 """Fontes contínuas de ofertas e cupons: sites de tecnologia (RSS), canais públicos do
-Telegram, Promobit e o fórum de promoções do hardMOB."""
+Telegram e Promobit."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from urllib.parse import urljoin
 import feedparser
 from selectolax.parser import HTMLParser
 
-from ..core import stores
 from ..core.dealtext import looks_like_deal
 from ..core.text import clip, parse_brl
 from .base import FeedSource, Fetcher, FoundCoupon, FoundDeal, SourceError
@@ -40,6 +39,8 @@ TELEGRAM_CHANNELS: dict[str, str] = {
     "promotop": "PromoTop",
     "pcdofafapromo": "PC do Fafa Promoções",
     "ofertaskabum": "KaBuM! (Telegram)",
+    # o fórum recusa clientes automatizados; este canal (não oficial) replica as promoções
+    "hardmob_promo": "hardMOB Promo",
 }
 
 
@@ -278,48 +279,3 @@ PROMOBIT_PAGES: list[tuple[str, str, str]] = [
     ("aliexpress", "Promobit · AliExpress", "/promocoes/loja/aliexpress/"),
     ("casasbahia", "Promobit · Casas Bahia", "/promocoes/loja/casas-bahia/"),
 ]
-
-
-class Hardmob(FeedSource):
-    key = "hardmob"
-    name = "hardMOB Promoções"
-    interval_seconds = 150
-    url = "https://www.hardmob.com.br/forums/407-Promocoes"
-
-    async def fetch(self, fetcher: Fetcher):
-        response = await fetcher.request("GET", self.url)
-        return self.parse(response.content.decode("cp1252", errors="replace")), []
-
-    def parse(self, page: str) -> list[FoundDeal]:
-        tree = HTMLParser(page)
-        rows = tree.css("li.threadbit")
-        if not rows:
-            raise SourceError("hardMOB: lista de tópicos não encontrada")
-        out = []
-        for row in rows:
-            if "sticky" in (row.css_first("div").attributes.get("class") or "").split():
-                continue
-            link = row.css_first("a.title")
-            if not link or "threadbit hot sticky" in row.attributes.get("class", ""):
-                continue
-            title = link.text(strip=True)
-            href = re.sub(r"\?s=\w+", "", link.attributes.get("href", ""))
-            thread = re.search(r"threads/(\d+)", href)
-            if not thread or not re.search(r"R\$|cupom|%|gr[áa]tis", title, re.I):
-                continue
-            info = row.css_first("div.threadinfo")
-            description = info.attributes.get("title", "") if info else ""
-            shop = re.search(r"https?://(?!(?:www\.)?hardmob)\S+", description)
-            out.append(
-                FoundDeal(
-                    source=self.key,
-                    source_name=self.name,
-                    external_id=thread.group(1),
-                    title=title,
-                    url=urljoin("https://www.hardmob.com.br/", href),
-                    link=shop.group(0) if shop else "",
-                    description=clip(description, 500),
-                    store=stores.find_in_text(title).name if stores.find_in_text(title) else "",
-                )
-            )
-        return out

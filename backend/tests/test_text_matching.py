@@ -54,6 +54,7 @@ def test_accepts_console(title):
         "Procuro PS5 usado",
         "Console PlayStation 4 Slim",
         "Somente a caixa do PS5",
+        "ps5 portal",
         "Minecraft PS5 Midia Fisica - Playstation",
         "Silent Hill F Day One Edition PS5 Midia Fisica",
         "EA Sports FC 27 PlayStation 5 Standard",

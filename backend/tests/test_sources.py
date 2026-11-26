@@ -9,7 +9,7 @@ import pytest
 from app.sources.amazon import Amazon
 from app.sources.base import Blocked, Fetcher, SearchParams, SourceError, assert_public_url
 from app.sources.comparators import Zoom
-from app.sources.feeds import Hardmob, Promobit, RssFeed, TelegramChannel
+from app.sources.feeds import Promobit, RssFeed, TelegramChannel
 from app.sources.generic import parse_product_page
 from app.sources.kabum import Kabum
 from app.sources.mercadolivre import MercadoLivre
@@ -262,15 +262,6 @@ def test_promobit_offers_and_coupons():
     assert deals[0].published_at.utcoffset().total_seconds() == -10800
     assert [c.code for c in coupons] == ["30OFF", ""]
     assert coupons[0].url == "https://www.promobit.com.br/Redirect/2"
-
-
-def test_hardmob_threads():
-    page = """<ol><li class="threadbit"><div class="rating0 nonsticky">
-      <div class="threadinfo" title="https://www.amazon.com.br/dp/1 texto"></div>
-      <a class="title" href="threads/123-JBL?s=abcdef">Amazon - JBL Boombox - R$1.486,65</a>
-      </div></li></ol>"""
-    [deal] = Hardmob().parse(page)
-    assert deal.url == "https://www.hardmob.com.br/threads/123-JBL" and deal.store == "Amazon"
 
 
 @pytest.mark.parametrize(

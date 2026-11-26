@@ -7,7 +7,7 @@ import re
 from datetime import timedelta
 from urllib.parse import urlparse
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -389,6 +389,12 @@ def cleanup(db: Session) -> None:
     db.execute(delete(RunRequest).where(RunRequest.created_at < now - timedelta(days=1)))
     db.execute(
         delete(Offer).where(~Offer.available, Offer.last_seen_at < now - timedelta(days=45))
+    )
+    # anúncios enviados pelo navegador (ou de fontes paradas) envelhecem e saem da lista
+    db.execute(
+        update(Offer)
+        .where(Offer.available, Offer.last_seen_at < now - timedelta(days=7))
+        .values(available=False)
     )
     db.commit()
 

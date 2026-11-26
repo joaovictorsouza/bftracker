@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core import analysis
+from ..core import analysis, importer
 from ..core.engine import reset_offers
 from ..db import get_db
 from ..models import DailyBest, Offer, RunRequest, User, Watch, utcnow
-from ..schemas import WatchIn
+from ..schemas import ImportIn, WatchIn
 from ..security import current_user
 from ..sources.base import SourceError, assert_public_url
 
@@ -194,3 +194,12 @@ def toggle_hidden(
         other.hidden = offer.hidden
     db.commit()
     return {"hidden": offer.hidden}
+
+
+@router.post("/import")
+def import_offers(
+    data: ImportIn, user: User = Depends(current_user), db: Session = Depends(get_db)
+):
+    """Recebe anúncios que o usuário capturou no próprio navegador."""
+    items = [importer.Item(**item.model_dump()) for item in data.items]
+    return importer.import_items(db, user, items)

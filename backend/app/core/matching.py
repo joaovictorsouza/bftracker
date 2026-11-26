@@ -94,6 +94,8 @@ def _is_game_for_console(words: list[str], text: str, wanted: set[str]) -> bool:
     platform = wanted & {"ps4", "ps5"}
     if not platform or not wanted - platform <= _CONSOLE_EXTRA:
         return False
+    if "portal" in words and "console" not in words:
+        return True  # PlayStation Portal é um acessório, não o console
     if re.search(r"\b(console|sony)\b", text):
         return False
     if re.search(r"\bmidia fisica\b", text):

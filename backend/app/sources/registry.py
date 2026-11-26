@@ -12,7 +12,6 @@ from .feeds import (
     PROMOBIT_PAGES,
     RSS_FEEDS,
     TELEGRAM_CHANNELS,
-    Hardmob,
     Promobit,
     RssFeed,
     TelegramChannel,
@@ -35,7 +34,6 @@ def store_sources(db: Session) -> list[StoreSource]:
 
 def feed_sources(db: Session) -> list[FeedSource]:
     sources: list[FeedSource] = [Promobit(*page) for page in PROMOBIT_PAGES]
-    sources.append(Hardmob())
     sources += [TelegramChannel(c, n) for c, n in TELEGRAM_CHANNELS.items()]
     sources += [RssFeed(k, n, u) for k, (n, u) in RSS_FEEDS.items()]
     for channel in get_json(db, "custom_telegram", []):

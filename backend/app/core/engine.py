@@ -57,6 +57,8 @@ class Collected:
     offers: list[tuple[FoundOffer, str, str]] = field(default_factory=list)  # (oferta, var, rótulo)
     report: dict = field(default_factory=dict)
     ok_sources: set[str] = field(default_factory=set)
+    # coleta parcial (ex.: anúncios enviados pelo navegador): não representa o mercado todo
+    partial: bool = False
 
 
 def selected_sources(db: Session, watch: Watch, sources: list[StoreSource]) -> list[StoreSource]:
@@ -159,10 +161,14 @@ async def collect(
     return result
 
 
-def screen_prices(offers: list[tuple[FoundOffer, str, str]]) -> tuple[list, set[int]]:
+def screen_prices(
+    offers: list[tuple[FoundOffer, str, str]], known_new: list[tuple[str, float]] | None = None
+) -> tuple[list, set[int]]:
     """Descarta itens que quase certamente são acessórios (muito abaixo da mediana) e
     marca como suspeitos os preços bons demais para ser verdade."""
+    known_new = known_new or []
     new_prices = [o.price for o, _, _ in offers if o.condition == "new"]
+    new_prices += [price for _, price in known_new]
     overall = median(new_prices) if len(new_prices) >= 6 else None
     if overall:
         offers = [item for item in offers if item[0].price >= overall * 0.22]
@@ -170,6 +176,8 @@ def screen_prices(offers: list[tuple[FoundOffer, str, str]]) -> tuple[list, set[
     for offer, key, _ in offers:
         if offer.condition == "new":
             by_variant[key].append(offer.price)
+    for key, price in known_new:
+        by_variant[key].append(price)
     every_new = [price for prices in by_variant.values() for price in prices]
     suspicious: set[int] = set()
     for offer, key, _ in offers:
@@ -241,12 +249,19 @@ def apply_results(db: Session, watch: Watch, collected: Collected) -> dict:
     day = today()
     baseline = not watch.baseline_done
     events = Events(db, watch)
-    offers, suspicious = screen_prices(collected.offers)
-
     existing = {
         (o.source, o.external_id): o
         for o in db.scalars(select(Offer).where(Offer.watch_id == watch.id))
     }
+    # numa coleta parcial, os preços de novos já conhecidos servem de referência
+    context = [
+        o for o in existing.values()
+        if collected.partial and o.available and o.condition == "new"
+        and not o.suspicious and not o.hidden
+    ]
+    offers, suspicious = screen_prices(
+        collected.offers, [(o.variant_key, o.price) for o in context]
+    )
     known_variants = {o.variant_key for o in existing.values()}
     known_combos = {(o.store_key, o.variant_key, o.condition) for o in existing.values()}
     history_rows = db.scalars(select(DailyBest).where(DailyBest.watch_id == watch.id)).all()
@@ -351,14 +366,22 @@ def apply_results(db: Session, watch: Watch, collected: Collected) -> dict:
             row.price, row.store, row.imported = offer.price, offer.store, False
 
     new_best = {k[0]: o for k, o in best.items() if k[1] == "new"}
-    if baseline:
+    if collected.partial:
+        for offer in context:
+            current = new_best.get(offer.variant_key)
+            if current is None or offer.price < current.price:
+                new_best[offer.variant_key] = offer
+    if baseline and collected.partial:
+        pass  # a primeira busca completa ainda vai formar a base
+    elif baseline:
         if live:
             _baseline_events(events, watch, live, new_best, best)
     else:
         _change_events(events, watch, live, best, new_best, past, known_variants, known_combos,
                        new_offers, drops, restocked, new_coupons)
 
-    watch.baseline_done = watch.baseline_done or bool(live)
+    if not collected.partial:
+        watch.baseline_done = watch.baseline_done or bool(live)
     db.flush()
     return {"found": len(live), "new": len(new_offers), "notifications": events.count}
 
@@ -431,7 +454,9 @@ def _change_events(events: Events, watch: Watch, live, best, new_best, past, kno
 
     fresh_variants: dict[str, list[Offer]] = defaultdict(list)
     for offer in new_offers:
-        if offer.variant_key not in known_variants and not offer.suspicious:
+        # usado de variante inédita é tratado como oportunidade, não como lançamento
+        if (offer.condition == "new" and offer.variant_key not in known_variants
+                and not offer.suspicious):
             fresh_variants[offer.variant_key].append(offer)
     for variant, group in list(fresh_variants.items())[:4]:
         cheapest = min(group, key=lambda o: o.price)

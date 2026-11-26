@@ -40,12 +40,15 @@ function UsedLinks({ watch }: { watch: WatchDetail }) {
   ];
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
-      Conferir também:
+      Abrir e capturar:
       {links.map(([name, url]) => (
         <a key={name} className="chip !py-1.5 hover:border-accent" href={url} target="_blank" rel="noreferrer">
           {name} <ExternalLink className="size-3" />
         </a>
       ))}
+      <Link to="/importar" className="font-semibold text-accent">
+        Como enviar os anúncios →
+      </Link>
     </div>
   );
 }

@@ -122,6 +122,21 @@ WhatsApp** e leia o QR Code.
 3. Copie o App ID (Client ID) e a chave secreta (Client Secret) para as Configurações e salve.
 4. Clique em **Conectar Mercado Livre** e autorize. O token é renovado automaticamente.
 
+## OLX e Mercado Livre pelo navegador
+
+Esses sites barram consultas automáticas (o Mercado Livre pede login). Em **Capturar do
+navegador**, instale o favorito *Enviar ao BFTracker*. Com a busca aberta no seu navegador,
+toque nele, confira a lista e importe: os anúncios entram nos monitorados que combinarem, com
+filtro de região, alerta de preço suspeito e aviso de oportunidade em usado. Também funciona na
+página de um produto de outras lojas que publiquem dados estruturados.
+
+- **Não é automático:** só entra o que você envia, e o anúncio sai da lista após 7 dias.
+- Nada é enviado antes da sua confirmação; o BFTracker não recebe sua senha nem cookies.
+- Para avisos automáticos de usados, salve também a busca no aplicativo da OLX
+  ([como fazer](https://ajuda.olx.com.br/s/article/favoritos-buscas-anuncios)).
+- Em 25/11/2026 o fluxo foi testado com uma página real de busca da OLX (salva) e com amostras
+  do Mercado Livre; **o leitor do Mercado Livre não foi validado numa listagem real**.
+
 ## Fontes de ofertas
 
 | Grupo | Fontes |
@@ -130,13 +145,12 @@ WhatsApp** e leia o QR Code.
 | Lojas consultadas diretamente | Amazon, KaBuM!, Americanas, Samsung, Motorola, Electrolux, Brastemp, Compra Certa, Sam's Club, Webcontinental, Casa & Video |
 | Usados e recondicionados | OLX, Trocafone, Mercado Livre (API), itens usados da Amazon, KaBuM! e Americanas |
 | Radar: sites | TudoCelular, Canaltech, Tecnoblog, Adrenaline, Mundo Conectado, MeuPlayStation |
-| Radar: comunidades | Promobit (ofertas e cupons por loja), hardMOB Promoções |
-| Radar: canais públicos do Telegram | Pelando, Pechinchou, Nerd Ofertas, Achados do Tecnoblog, TudoCelular, Baita Compra Tech, Ofertas Adrenaline, Bench Promos, Seletronic, PromoTop, PC do Fafa, KaBuM! |
+| Radar: comunidades | Promobit (ofertas e cupons por loja) |
+| Radar: canais públicos do Telegram | Pelando, Pechinchou, Nerd Ofertas, Achados do Tecnoblog, TudoCelular, Baita Compra Tech, Ofertas Adrenaline, Bench Promos, Seletronic, PromoTop, PC do Fafa, KaBuM!, hardMOB Promo (canal não oficial) |
 | Qualquer loja | Monitoramento por link (dados schema.org/Open Graph da página) |
 
 Você pode acrescentar canais do Telegram, feeds RSS e lojas VTEX em **Configurações → Fontes**.
-Os canais são atualizados a cada ~75 s, os fóruns e agregadores a cada 2–3 min e os feeds a
-cada 4 min.
+Os canais são atualizados a cada ~75 s, o Promobit a cada 3 min e os feeds a cada 4 min.
 
 ### Limitações reais (leia antes)
 
@@ -148,11 +162,12 @@ docker compose exec app python -m app.cli check-sources ps5
 
 Na validação de **25/11/2026**, a partir de uma conexão residencial:
 
-- **OLX** e **hardMOB** recusaram o acesso do aplicativo (HTTP 403), embora as páginas abram
-  num navegador na mesma conexão: a recusa é ao cliente automatizado, então é provável que
-  também ocorra no VPS. Os coletores são testados com amostras, mas **não foram validados contra
-  o site ao vivo pelo aplicativo**. Enquanto estiver bloqueada, a aba *Usados* oferece atalhos para
-  abrir a busca na OLX, Mercado Livre, Enjoei e Facebook Marketplace.
+- **OLX** recusou o acesso do aplicativo (HTTP 403), embora a página abra num navegador na
+  mesma conexão: a recusa é ao cliente automatizado, então é provável que também ocorra no VPS.
+  O coletor **não foi validado contra o site ao vivo**. Use a [captura pelo
+  navegador](#olx-e-mercado-livre-pelo-navegador).
+- **hardMOB:** o fórum também recusa o aplicativo; as promoções entram por um canal público e
+  **não oficial** do Telegram que as replica.
 - **Mercado Livre** exige aplicativo aprovado e conta conectada para a busca direta (veja
   acima). A integração segue a documentação, mas **não foi testada com credenciais reais**, e a
   API pode negar a busca conforme as permissões do aplicativo. Sem ela, ofertas e cupons do

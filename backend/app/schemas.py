@@ -167,3 +167,16 @@ class CustomSourceIn(BaseModel):
     kind: str = Field(pattern="^(telegram|rss|vtex)$")
     name: str = Field(default="", max_length=60)
     value: str = Field(min_length=3, max_length=500)  # canal ou URL
+
+
+class ImportItem(BaseModel):
+    title: str = Field(min_length=2, max_length=300)
+    url: str = Field(min_length=10, max_length=2000, pattern=r"^https://[^\s/@]+/\S*$")
+    price: float = Field(gt=0, lt=10_000_000)
+    condition: str = Field(default="", max_length=12)
+    location: str = Field(default="", max_length=160)
+    image: str = Field(default="", max_length=2000, pattern=r"^(https://\S+)?$")
+
+
+class ImportIn(BaseModel):
+    items: list[ImportItem] = Field(min_length=1, max_length=100)

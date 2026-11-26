@@ -7,6 +7,7 @@ import { disablePush } from "./lib/push";
 import type { User } from "./lib/types";
 import { Coupons } from "./pages/Coupons";
 import { Dashboard } from "./pages/Dashboard";
+import { Import } from "./pages/Import";
 import { Interests } from "./pages/Interests";
 import { Notifications } from "./pages/Notifications";
 import { Radar } from "./pages/Radar";
@@ -125,6 +126,7 @@ export function App() {
         <Route path="monitorados/:id" element={<WatchDetailPage />} />
         <Route path="radar" element={<Radar />} />
         <Route path="cupons" element={<Coupons />} />
+        <Route path="importar" element={<Import />} />
         <Route path="alertas" element={<Interests />} />
         <Route path="avisos" element={<Notifications />} />
         <Route path="configuracoes" element={<Settings user={user} onUser={setUser} />} />

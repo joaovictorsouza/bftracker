@@ -261,3 +261,18 @@ def test_mercadolivre_connection(client, monkeypatch):
     assert replay.headers["location"].endswith("ml=erro") and used == ["TG-1"]
     client.delete("/api/admin/ml/connection")
     assert client.get("/api/admin/ml/status").json()["connected"] is False
+
+
+def test_import_endpoint_validates_and_requires_login(client):
+    good = {"title": "PS5 Slim", "price": 3000,
+            "url": "https://sp.olx.com.br/grande-campinas/games/ps5-1556003399"}
+    assert client.post("/api/import", json={"items": [good]}).status_code == 401
+    login(client)
+    done = client.post("/api/import", json={"items": [good]})
+    assert done.status_code == 200 and done.json() == {"received": 1, "matched": 0, "watches": []}
+    for bad in ({"url": "javascript:alert(1)//aaaa"}, {"url": "http://x.example/a"},
+                {"url": "https://evil@x.example/a"}, {"price": -1},
+                {"image": "javascript:x"}):
+        response = client.post("/api/import", json={"items": [good | bad]})
+        assert response.status_code == 422, bad
+    assert client.post("/api/import", json={"items": [good] * 101}).status_code == 422
