@@ -15,7 +15,7 @@ from ..models import AppSetting
 
 SECRET_KEYS = {
     "smtp_password", "waha_api_key", "evolution_api_key", "meta_wa_token", "ml_client_secret",
-    "ml_access_token", "vapid_private_key", "whatsapp_webhook_url",
+    "ml_access_token", "ml_refresh_token", "ml_access_cache", "vapid_private_key", "whatsapp_webhook_url",
 }
 EDITABLE_KEYS = (
     "public_url",

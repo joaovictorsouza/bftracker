@@ -109,6 +109,19 @@ WhatsApp** e leia o QR Code.
 > WAHA e Evolution usam o WhatsApp de forma não oficial: há risco de o número ser bloqueado.
 > Prefira um número secundário, ou a API oficial da Meta.
 
+### Mercado Livre (busca direta, opcional)
+
+1. Entre em [developers.mercadolivre.com.br](https://developers.mercadolivre.com.br) com a conta
+   principal (contas de colaborador não funcionam). Se você ainda não tem aplicativo, a
+   [documentação](https://developers.mercadolivre.com.br/pt_br/crie-uma-aplicacao-no-mercado-livre)
+   (versão de 24/11/2026) pede um formulário de solicitação, com análise de **até 10 dias**.
+2. Com o acesso liberado, crie a aplicação no DevCenter. Como URI de redirecionamento, use a
+   mostrada em **Configurações → Integrações**:
+   `https://SEU-DOMINIO/api/admin/ml/callback`. Marque leitura e acesso offline
+   (`offline_access`) e deixe o PKCE desativado.
+3. Copie o App ID (Client ID) e a chave secreta (Client Secret) para as Configurações e salve.
+4. Clique em **Conectar Mercado Livre** e autorize. O token é renovado automaticamente.
+
 ## Fontes de ofertas
 
 | Grupo | Fontes |
@@ -135,14 +148,15 @@ docker compose exec app python -m app.cli check-sources ps5
 
 Na validação de **25/11/2026**, a partir de uma conexão residencial:
 
-- **OLX** e **hardMOB** recusaram o acesso automatizado (HTTP 403). Os coletores existem e são
-  testados com amostras, mas **não foram validados contra o site ao vivo pelo aplicativo**. Pode
-  ser diferente no IP do seu VPS. Enquanto estiver bloqueada, a aba *Usados* oferece atalhos para
+- **OLX** e **hardMOB** recusaram o acesso do aplicativo (HTTP 403), embora as páginas abram
+  num navegador na mesma conexão: a recusa é ao cliente automatizado, então é provável que
+  também ocorra no VPS. Os coletores são testados com amostras, mas **não foram validados contra
+  o site ao vivo pelo aplicativo**. Enquanto estiver bloqueada, a aba *Usados* oferece atalhos para
   abrir a busca na OLX, Mercado Livre, Enjoei e Facebook Marketplace.
-- **Mercado Livre** exige credenciais da API oficial para busca direta
-  ([developers.mercadolivre.com.br](https://developers.mercadolivre.com.br)). Essa integração
-  segue a documentação, mas **não foi testada com credenciais reais**. Sem elas, ofertas e cupons
-  do Mercado Livre chegam pelos comparadores, Promobit e canais.
+- **Mercado Livre** exige aplicativo aprovado e conta conectada para a busca direta (veja
+  acima). A integração segue a documentação, mas **não foi testada com credenciais reais**, e a
+  API pode negar a busca conforme as permissões do aplicativo. Sem ela, ofertas e cupons do
+  Mercado Livre chegam pelos comparadores, Promobit e canais.
 - **Magazine Luiza** e **Casas Bahia** barram consultas diretas; os preços chegam pelos
   comparadores e pelo radar.
 - **Amazon** às vezes limita requisições (HTTP 503); o monitor espera e tenta de novo.

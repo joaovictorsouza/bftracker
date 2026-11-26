@@ -1,20 +1,23 @@
 """Mercado Livre pela API oficial (catálogo e ofertas por produto, novos e usados).
 
-Desde 2025 o Mercado Livre exige autenticação na API e costuma barrar acesso
-automatizado ao site. Crie um aplicativo em developers.mercadolivre.com.br e informe
-Client ID e Client Secret em Configurações. Sem credenciais, as ofertas do Mercado
-Livre continuam chegando pelos comparadores e pelos canais de promoções.
+A API exige uma aplicação aprovada em developers.mercadolivre.com.br e a autorização da
+sua conta (botão "Conectar Mercado Livre" nas Configurações). Sem isso, as ofertas do
+Mercado Livre continuam chegando pelos comparadores e pelos canais de promoções.
 """
 
 from __future__ import annotations
 
-import time
+import asyncio
 from urllib.parse import quote_plus
 
 from ..core.text import parse_brl
+from . import mlauth
 from .base import Fetcher, FoundOffer, NotConfigured, SearchParams, SourceError, StoreSource
 
 API = "https://api.mercadolibre.com"
+
+# o refresh token é de uso único: só uma renovação por vez
+_refresh_lock = asyncio.Lock()
 
 
 class MercadoLivre(StoreSource):
@@ -23,38 +26,23 @@ class MercadoLivre(StoreSource):
     covers = "Mercado Livre"
     max_products = 8
 
-    def __init__(self, client_id: str = "", client_secret: str = "", access_token: str = ""):
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.access_token = access_token
-        self._token: tuple[str, float] | None = None
+    def __init__(self, token_provider=mlauth.access_token):
+        self.token_provider = token_provider
 
-    async def _auth(self, fetcher: Fetcher) -> dict:
-        if self.client_id and self.client_secret:
-            if not self._token or self._token[1] < time.time():
-                response = await fetcher.request(
-                    "POST",
-                    f"{API}/oauth/token",
-                    data={
-                        "grant_type": "client_credentials",
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                    },
-                )
-                body = response.json()
-                token = body.get("access_token")
-                if not token:
-                    raise SourceError("Mercado Livre não devolveu token de acesso")
-                self._token = (token, time.time() + int(body.get("expires_in", 3600)) - 120)
-            return {"Authorization": f"Bearer {self._token[0]}"}
-        if self.access_token:
-            return {"Authorization": f"Bearer {self.access_token}"}
-        raise NotConfigured(
-            "Informe as credenciais da API do Mercado Livre em Configurações para busca direta"
-        )
+    async def _auth(self) -> dict:
+        async with _refresh_lock:
+            try:
+                token = await asyncio.to_thread(self.token_provider)
+            except mlauth.AuthError as exc:
+                raise SourceError(str(exc)) from exc
+        if not token:
+            raise NotConfigured(
+                "Conecte sua conta do Mercado Livre em Configurações para a busca direta"
+            )
+        return {"Authorization": f"Bearer {token}"}
 
     async def search(self, fetcher: Fetcher, params: SearchParams) -> list[FoundOffer]:
-        headers = await self._auth(fetcher)
+        headers = await self._auth()
         data = await fetcher.get_json(
             f"{API}/products/search?status=active&site_id=MLB&limit=20&q="
             f"{quote_plus(params.query)}",

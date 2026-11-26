@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from ..core.appsettings import get_json, get_value
+from ..core.appsettings import get_json
 from .amazon import Amazon
 from .base import FeedSource, StoreSource
 from .comparators import Buscape, Zoom
@@ -22,18 +22,9 @@ from .mercadolivre import MercadoLivre
 from .olx import Olx
 from .vtex import DEFAULT_VTEX, Vtex
 
-_ml_cache: dict[tuple, MercadoLivre] = {}
-
 
 def store_sources(db: Session) -> list[StoreSource]:
-    credentials = (
-        get_value(db, "ml_client_id"),
-        get_value(db, "ml_client_secret"),
-        get_value(db, "ml_access_token"),
-    )
-    ml = _ml_cache.get(credentials) or MercadoLivre(*credentials)
-    _ml_cache[credentials] = ml
-    sources: list[StoreSource] = [Zoom(), Buscape(), Amazon(), Kabum(), ml, Olx()]
+    sources: list[StoreSource] = [Zoom(), Buscape(), Amazon(), Kabum(), MercadoLivre(), Olx()]
     sources += [Vtex(key, name, url, cond) for key, (name, url, cond) in DEFAULT_VTEX.items()]
     for custom in get_json(db, "custom_vtex", []):
         sources.append(

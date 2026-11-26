@@ -146,26 +146,63 @@ def test_mercadolivre_items_and_missing_credentials():
     assert [o.condition for o in ml.parse_items(product, data, ALL)] == ["new", "used"]
     assert len(ml.parse_items(product, data, SearchParams(query="ps5"))) == 1
     with pytest.raises(SourceError):
-        asyncio.run(ml.search(None, ALL))
+        asyncio.run(MercadoLivre(lambda: "").search(None, ALL))
 
 
-def test_mercadolivre_oauth_flow():
+def test_mercadolivre_search_sends_bearer_token():
     seen = []
 
     def handler(request):
-        seen.append((request.method, request.url.path, request.headers.get("authorization")))
-        if request.url.path == "/oauth/token":
-            return httpx.Response(200, json={"access_token": "abc", "expires_in": 3600})
+        seen.append(request.headers.get("authorization"))
         if request.url.path == "/products/search":
             return httpx.Response(200, json={"results": [{"id": "MLB1", "name": "PS5 Slim"}]})
         return httpx.Response(200, json={"results": [{"item_id": "1", "price": 4000}]})
 
     async def run():
         async with Fetcher(min_delay=0, transport=httpx.MockTransport(handler)) as fetcher:
-            return await MercadoLivre("id", "secret").search(fetcher, ALL)
+            return await MercadoLivre(lambda: "abc").search(fetcher, ALL)
 
     assert asyncio.run(run())[0].price == 4000
-    assert seen[0][:2] == ("POST", "/oauth/token") and seen[-1][2] == "Bearer abc"
+    assert seen == ["Bearer abc", "Bearer abc"]
+
+
+def test_mercadolivre_authorization_and_refresh_rotation():
+    from urllib.parse import parse_qs
+
+    from app.core.appsettings import set_value, stored
+    from app.db import session_scope
+    from app.sources import mlauth
+
+    sent = []
+
+    def handler(request):
+        data = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
+        sent.append(data)
+        number = len(sent)
+        return httpx.Response(200, json={"access_token": f"acesso-{number}", "expires_in": 21600,
+                                         "refresh_token": f"renova-{number}"})
+
+    transport = httpx.MockTransport(handler)
+    assert mlauth.access_token(transport) == ""
+    with session_scope() as db:
+        set_value(db, "ml_client_id", "123")
+        set_value(db, "ml_client_secret", "segredo")
+        mlauth.exchange_code(db, "TG-code", "https://x.example/cb", transport)
+    assert sent[0]["grant_type"] == "authorization_code" and sent[0]["code"] == "TG-code"
+    assert mlauth.access_token(transport) == "acesso-1" and len(sent) == 1, "usa o cache"
+    with session_scope() as db:
+        set_value(db, "ml_access_expires", "1")
+    assert mlauth.access_token(transport) == "acesso-2"
+    assert sent[1] == {"grant_type": "refresh_token", "client_id": "123",
+                       "client_secret": "segredo", "refresh_token": "renova-1"}
+    with session_scope() as db:
+        assert stored(db, "ml_refresh_token") == "renova-2", "o novo refresh token é guardado"
+
+    with session_scope() as db:
+        set_value(db, "ml_access_expires", "1")
+    denied = httpx.MockTransport(lambda r: httpx.Response(400, json={"error": "invalid_grant"}))
+    with pytest.raises(mlauth.AuthError, match="invalid_grant"):
+        mlauth.access_token(denied)
 
 
 def test_generic_page_json_ld_and_meta():

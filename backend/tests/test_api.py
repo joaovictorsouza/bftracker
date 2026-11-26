@@ -22,6 +22,7 @@ PROTECTED = [
     "/api/me", "/api/watches", "/api/deals", "/api/coupons", "/api/interests",
     "/api/notifications", "/api/dashboard", "/api/meta", "/api/push/key", "/api/events",
     "/api/admin/settings", "/api/admin/sources", "/api/admin/users", "/api/admin/whatsapp/qr",
+    "/api/admin/ml/status", "/api/admin/ml/callback",
 ]
 
 
@@ -226,3 +227,37 @@ def test_deal_search_escapes_wildcards(client):
     assert len(client.get("/api/deals", params={"q": "50%"}).json()["items"]) == 1
     assert client.get("/api/deals", params={"q": "_zzz"}).json()["items"] == []
     assert client.get("/api/deals", params={"kind": "invalido"}).status_code == 422
+
+
+def test_mercadolivre_connection(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+
+    from app.sources import mlauth
+
+    login(client)
+    assert client.post("/api/admin/ml/authorize").status_code == 400
+    values = {"ml_client_id": "123", "ml_client_secret": "s", "public_url": "http://x.example"}
+    client.put("/api/admin/settings", json={"values": values})
+    assert "HTTPS" in client.post("/api/admin/ml/authorize").json()["detail"]
+    client.put("/api/admin/settings", json={"values": {"public_url": "https://x.example"}})
+    url = client.post("/api/admin/ml/authorize").json()["url"]
+    query = parse_qs(urlparse(url).query)
+    assert query["redirect_uri"] == ["https://x.example/api/admin/ml/callback"]
+
+    used = []
+
+    def exchange(db, code, uri, transport=None):
+        used.append(code)
+        mlauth._save(db, {"access_token": "a", "refresh_token": "r"})
+
+    monkeypatch.setattr(mlauth, "exchange_code", exchange)
+    forged = client.get("/api/admin/ml/callback?code=c&state=falso", follow_redirects=False)
+    assert forged.headers["location"].endswith("ml=erro") and not used
+    callback = f"/api/admin/ml/callback?code=TG-1&state={query['state'][0]}"
+    done = client.get(callback, follow_redirects=False)
+    assert done.headers["location"].endswith("ml=ok") and used == ["TG-1"]
+    assert client.get("/api/admin/ml/status").json()["connected"] is True
+    replay = client.get(callback, follow_redirects=False)
+    assert replay.headers["location"].endswith("ml=erro") and used == ["TG-1"]
+    client.delete("/api/admin/ml/connection")
+    assert client.get("/api/admin/ml/status").json()["connected"] is False

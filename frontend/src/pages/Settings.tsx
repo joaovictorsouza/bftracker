@@ -304,6 +304,53 @@ function WahaPanel() {
   );
 }
 
+function MercadoLivrePanel({ saved }: { saved: boolean }) {
+  const [params] = useSearchParams();
+  const { data, reload } = useData<{ connected: boolean; ready: boolean; redirect_uri: string }>(
+    "/admin/ml/status",
+  );
+  const { busy, run } = useAction();
+  useEffect(() => {
+    if (saved) void reload();
+  }, [saved, reload]);
+  if (!data) return null;
+  const result = params.get("ml");
+  return (
+    <div className="mt-4 rounded-xl bg-surface-2 p-4 text-sm">
+      <p className="text-muted">URI de redirecionamento (cadastre exatamente assim no aplicativo):</p>
+      <p className="mb-3 font-mono text-xs break-all">{data.redirect_uri}</p>
+      <p className="font-semibold">{data.connected ? "✅ Conta conectada" : "Conta não conectada"}</p>
+      {result === "erro" && !data.connected && (
+        <p className="text-bad">A autorização falhou. Confira as credenciais e a URI e tente de novo.</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="btn-primary"
+          disabled={busy || !data.ready}
+          onClick={() =>
+            void run(async () => {
+              const { url } = await api.post<{ url: string }>("/admin/ml/authorize");
+              window.location.assign(url);
+            })
+          }
+        >
+          Conectar Mercado Livre
+        </button>
+        {data.connected && (
+          <button
+            className="btn-danger"
+            disabled={busy}
+            onClick={() => void run(async () => { await api.del("/admin/ml/connection"); await reload(); })}
+          >
+            Desconectar
+          </button>
+        )}
+      </div>
+      {!data.ready && <p className="mt-2 text-xs text-warn">Salve o Client ID e o Client Secret antes.</p>}
+    </div>
+  );
+}
+
 function Integrations() {
   const { data, error, setData } = useData<ServerSettings>("/admin/settings");
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -376,11 +423,12 @@ function Integrations() {
           </>
         )}
       </Section>
-      <Section title="Mercado Livre (API oficial)" hint="Opcional: crie um app em developers.mercadolivre.com.br para buscar direto, inclusive usados.">
+      <Section title="Mercado Livre (API oficial)" hint="Opcional, para busca direta (inclusive usados). Exige aplicativo aprovado em developers.mercadolivre.com.br.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {input(["ml_client_id", "Client ID"])}
           {input(["ml_client_secret", "Client Secret"])}
         </div>
+        <MercadoLivrePanel saved={Object.keys(draft).length === 0} />
       </Section>
       <button className="btn-primary" disabled={busy || Object.keys(draft).length === 0} onClick={() => void save()}>
         {busy && <Spinner className="size-4" />} Salvar configurações

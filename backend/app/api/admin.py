@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import re
+import secrets
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,6 +36,7 @@ from ..models import (
 from ..notify.whatsapp import PROVIDERS
 from ..schemas import CustomSourceIn, SettingsIn, ToggleIn, UserIn
 from ..security import admin_user, hash_password
+from ..sources import mlauth
 from ..sources.base import SourceError, assert_public_url
 from ..sources.registry import feed_sources, store_sources
 from .auth import user_dict
@@ -278,3 +282,56 @@ def whatsapp_qr(db: Session = Depends(get_db)):
         response.content, media_type=response.headers.get("content-type", "image/png"),
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get("/ml/status")
+def ml_status(db: Session = Depends(get_db)):
+    return {
+        "connected": bool(stored(db, "ml_refresh_token")),
+        "ready": bool(get_value(db, "ml_client_id") and get_value(db, "ml_client_secret")),
+        "redirect_uri": mlauth.redirect_uri(get_value(db, "public_url")),
+    }
+
+
+@router.post("/ml/authorize")
+def ml_authorize(db: Session = Depends(get_db)):
+    client_id = get_value(db, "ml_client_id")
+    if not client_id or not get_value(db, "ml_client_secret"):
+        raise HTTPException(400, "Salve o Client ID e o Client Secret primeiro")
+    uri = mlauth.redirect_uri(get_value(db, "public_url"))
+    if not uri.startswith("https://"):
+        raise HTTPException(400, "O Mercado Livre exige que o endereço público use HTTPS")
+    state = secrets.token_urlsafe(24)
+    set_value(db, "ml_oauth_state", f"{int(time.time())}:{state}")
+    db.commit()
+    return {"url": mlauth.authorization_url(client_id, uri, state)}
+
+
+@router.get("/ml/callback")
+def ml_callback(code: str = "", state: str = "", db: Session = Depends(get_db)):
+    """Retorno do Mercado Livre após o usuário autorizar o aplicativo."""
+    created, _, expected = (stored(db, "ml_oauth_state") or "").partition(":")
+    valid = (
+        bool(expected)
+        and secrets.compare_digest(state.encode(), expected.encode())
+        and time.time() - int(created) < 900
+    )
+    result = "erro"
+    if valid and code:
+        set_value(db, "ml_oauth_state", "")  # cada autorização vale uma vez
+        try:
+            mlauth.exchange_code(db, code, mlauth.redirect_uri(get_value(db, "public_url")))
+            result = "ok"
+            status = get_status(db, "mercadolivre", "Mercado Livre (API)", "store")
+            status.blocked_until, status.failures = None, 0
+        except mlauth.AuthError:
+            pass
+        db.commit()
+    return RedirectResponse(f"/configuracoes?aba=integracoes&ml={result}", status_code=303)
+
+
+@router.delete("/ml/connection")
+def ml_disconnect(db: Session = Depends(get_db)):
+    mlauth.disconnect(db)
+    db.commit()
+    return {"ok": True}
