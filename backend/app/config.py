@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("data")
     database_url: str = ""
+    # Senha do banco separada da URL: caracteres como @ : / # na senha quebram a URL
+    # se forem colados nela sem escape. Quando definida, substitui a senha da URL.
+    database_password: str = ""
     secret_key: str = ""
 
     admin_username: str = "admin"
@@ -82,7 +85,12 @@ class Settings(BaseSettings):
     @property
     def db_url(self) -> str:
         if self.database_url:
-            return self.database_url
+            if not self.database_password:
+                return self.database_url
+            from sqlalchemy.engine import make_url
+
+            url = make_url(self.database_url).set(password=self.database_password)
+            return url.render_as_string(hide_password=False)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{self.data_dir / 'bftracker.db'}"
 
