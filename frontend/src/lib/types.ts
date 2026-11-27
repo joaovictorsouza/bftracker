@@ -235,6 +235,16 @@ export interface Dashboard {
   }[];
   hot: Deal[];
   worker_online: boolean;
+  x_live_url?: string;
+}
+
+export interface ApiTokenInfo {
+  id: number;
+  name: string;
+  prefix: string;
+  token?: string;
+  last_used_at: string | null;
+  created_at: string;
 }
 
 export interface SourceRow {

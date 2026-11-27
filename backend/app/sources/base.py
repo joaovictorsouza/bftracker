@@ -31,6 +31,9 @@ HEADERS = {
 _BLOCK_MARKERS = (
     "api-services-support@amazon.com",
     "/errors/validatecaptcha",
+    "bm-verify",
+    "triggerinterstitialchallenge",
+    "/_sec/verify",
     "<title>just a moment",
     "suspicious-traffic-frontend",
     "account-verification",

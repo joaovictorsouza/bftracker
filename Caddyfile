@@ -1,9 +1,0 @@
-# SITE_ADDRESS=":80"                      -> HTTP simples (teste)
-# SITE_ADDRESS="ofertas.seudominio.com"   -> HTTPS automático (necessário para push)
-{$SITE_ADDRESS} {
-	encode zstd gzip
-	reverse_proxy app:8000 {
-		# eventos em tempo real não podem ficar em buffer
-		flush_interval -1
-	}
-}

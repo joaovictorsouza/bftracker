@@ -3,6 +3,7 @@
   "short_name": "BFTracker",
   "description": "Monitor de preços, cupons e ofertas relâmpago",
   "lang": "pt-BR",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

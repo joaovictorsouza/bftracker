@@ -15,7 +15,7 @@ from .config import get_settings
 from .db import init_db, session_scope
 from .models import Heartbeat, utcnow
 from .notify.webpush import ensure_keys
-from .security import ensure_admin
+from .security import ensure_admin, is_https_request
 
 log = logging.getLogger("bftracker")
 
@@ -55,10 +55,11 @@ def create_app() -> FastAPI:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        if request.url.scheme == "https":
+        if is_https_request(request):
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault("CDN-Cache-Control", "no-store")
         return response
 
     for module in (auth, watches, radar, notifications, admin):
@@ -83,12 +84,25 @@ def create_app() -> FastAPI:
             return JSONResponse({"detail": "Interface não compilada"}, status_code=503)
         target = (dist / path).resolve()
         if path and target.is_relative_to(dist) and target.is_file():
+            if path in ("sw.js", "manifest.webmanifest"):
+                extra = {"Service-Worker-Allowed": "/"} if path == "sw.js" else {}
+                return FileResponse(
+                    target,
+                    headers={
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        "CDN-Cache-Control": "no-store",
+                        **extra,
+                    },
+                )
             cache = (
                 "public, max-age=31536000, immutable" if path.startswith("assets/")
                 else "no-cache"
             )
             return FileResponse(target, headers={"Cache-Control": cache})
-        return FileResponse(index, headers={"Cache-Control": "no-cache"})
+        return FileResponse(
+            index,
+            headers={"Cache-Control": "no-cache", "CDN-Cache-Control": "no-store"},
+        )
 
     return app
 

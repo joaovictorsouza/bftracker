@@ -52,6 +52,24 @@ class Settings(BaseSettings):
     ml_client_secret: str = ""
     ml_access_token: str = ""
 
+    # X / Twitter (monitoramento de ofertas para produtos cadastrados e perfis)
+    x_bearer_token: str = ""
+    x_api_key: str = ""
+    x_api_secret: str = ""
+    x_accounts: str = "pelandobr,promobitoficial,pechinchou,nerdofertas,achadosdotb,ofertasadrena,pcdofafa"
+    x_rss_search_url: str = ""
+
+    # Busca Web opcional (Serper.dev / Brave Search — cobre ML, OLX, HardMob e X sem API do ML)
+    serper_api_key: str = ""
+    brave_api_key: str = ""
+
+    # Leitor de alertas por e-mail via IMAP (buscas salvas OLX, fórum HardMob, Google Alerts, ML)
+    imap_host: str = ""
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_password: str = ""
+    imap_folder: str = "INBOX"
+
     # Contato usado no VAPID (Web Push)
     vapid_subject: str = ""
 

@@ -10,6 +10,7 @@ from ..schemas import LoginIn, PasswordIn, ProfileIn
 from ..security import (
     COOKIE,
     check_credentials,
+    client_ip,
     current_user,
     hash_password,
     limiter,
@@ -29,7 +30,7 @@ def user_dict(user: User) -> dict:
 
 @router.post("/auth/login")
 def login(data: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
     keys = (f"ip:{ip}", f"user:{ip}:{data.username.lower()}")
     limiter.check(*keys)
     user = check_credentials(db, data.username, data.password)

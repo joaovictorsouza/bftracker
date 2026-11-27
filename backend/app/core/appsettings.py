@@ -15,7 +15,9 @@ from ..models import AppSetting
 
 SECRET_KEYS = {
     "smtp_password", "waha_api_key", "evolution_api_key", "meta_wa_token", "ml_client_secret",
-    "ml_access_token", "ml_refresh_token", "ml_access_cache", "vapid_private_key", "whatsapp_webhook_url",
+    "ml_access_token", "ml_refresh_token", "ml_access_cache", "vapid_private_key",
+    "whatsapp_webhook_url", "x_bearer_token", "x_api_secret", "x_bearer_cache",
+    "serper_api_key", "brave_api_key", "imap_password",
 }
 EDITABLE_KEYS = (
     "public_url",
@@ -24,6 +26,9 @@ EDITABLE_KEYS = (
     "evolution_url", "evolution_api_key", "evolution_instance",
     "meta_wa_token", "meta_wa_phone_id", "meta_wa_template", "meta_wa_template_lang",
     "whatsapp_webhook_url",
+    "x_bearer_token", "x_api_key", "x_api_secret", "x_accounts", "x_rss_search_url",
+    "serper_api_key", "brave_api_key",
+    "imap_host", "imap_port", "imap_user", "imap_password", "imap_folder",
     "ml_client_id", "ml_client_secret", "ml_access_token",
 )
 

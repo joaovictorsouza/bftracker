@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "BFTracker Companion",
+  "version": "1.0.0",
+  "description": "Envia ofertas e anúncios do Mercado Livre, OLX, hardMOB e X (Twitter) direto para o seu BFTracker pessoal.",
+  "permissions": ["storage", "activeTab", "tabs"],
+  "host_permissions": ["https://*/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "BFTracker Companion",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "128": "icon-192.png"
+    }
+  },
+  "icons": {
+    "128": "icon-192.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.mercadolivre.com.br/*",
+        "https://*.mercadolibre.com/*",
+        "https://*.olx.com.br/*",
+        "https://*.hardmob.com.br/*",
+        "https://x.com/*",
+        "https://*.x.com/*",
+        "https://twitter.com/*",
+        "https://*.twitter.com/*",
+        "https://*.enjoei.com.br/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

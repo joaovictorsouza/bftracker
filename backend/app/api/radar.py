@@ -13,6 +13,7 @@ from ..models import Coupon, Deal, Heartbeat, Interest, Notification, Offer, Use
 from ..schemas import InterestIn
 from ..security import current_user
 from ..sources.olx import STATES
+from ..sources.x_twitter import build_x_live_url
 
 router = APIRouter(prefix="/api", tags=["radar"])
 
@@ -42,6 +43,7 @@ def list_deals(
     category: str = "",
     store: str = "",
     kind: str = Query(default="", pattern="^(|flash|coupon|blackfriday|bug)$"),
+    origin: str = Query(default="", pattern="^(|x|portals|telegram|rss|email)$"),
     sort: str = Query(default="recent", pattern="^(recent|hot|price)$"),
     hours: int = Query(default=72, ge=1, le=720),
     offset: int = Query(default=0, ge=0, le=5000),
@@ -59,6 +61,21 @@ def list_deals(
         query = query.where(Deal.category == category)
     if store:
         query = query.where(Deal.store_key == store)
+    if origin == "x":
+        query = query.where(Deal.source == "x_twitter")
+    elif origin == "portals":
+        query = query.where(
+            or_(
+                Deal.source.in_(("promobit", "pelando", "gatry", "hardmob")),
+                Deal.source == "tg:hardmob_promo",
+            )
+        )
+    elif origin == "telegram":
+        query = query.where(Deal.source.like("tg:%"))
+    elif origin == "rss":
+        query = query.where(Deal.source.like("rss:%"))
+    elif origin == "email":
+        query = query.where(Deal.source.like("imap:%"))
     if kind:
         column = {"flash": Deal.is_flash, "coupon": Deal.is_coupon,
                   "blackfriday": Deal.is_blackfriday, "bug": Deal.is_bug}[kind]
@@ -233,6 +250,9 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
             prints.add(row.fingerprint)
             hot.append(deal_dict(row))
     beat = db.get(Heartbeat, "worker")
+    watch_queries = db.scalars(
+        select(Watch.query).where(Watch.user_id == user.id, Watch.active, Watch.kind == "product")
+    ).all()
     return {
         "stats": {
             "watches": count(
@@ -258,4 +278,5 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
         "drops": drops[:8],
         "hot": hot[:8],
         "worker_online": bool(beat and now - beat.at < timedelta(seconds=60)),
+        "x_live_url": build_x_live_url([q for q in watch_queries if q]),
     }

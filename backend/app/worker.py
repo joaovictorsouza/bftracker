@@ -17,7 +17,7 @@ from .db import init_db, session_scope
 from .models import Heartbeat, RunRequest, Watch, utcnow
 from .notify.dispatch import deliver_pending
 from .notify.webpush import ensure_keys
-from .sources.base import Blocked, FeedSource, Fetcher
+from .sources.base import Blocked, FeedSource, Fetcher, NotConfigured
 from .sources.registry import feed_sources, store_sources
 
 log = logging.getLogger("bftracker.worker")
@@ -62,6 +62,12 @@ class Worker:
                 with session_scope() as db:
                     status = get_status(db, source.key, source.name, "feed")
                     if error is not None:
+                        if isinstance(error, NotConfigured):
+                            status.state = "unconfigured"
+                            status.message = str(error)[:500]
+                            status.last_run_at = utcnow()
+                            status.blocked_until = None
+                            return
                         state = "blocked" if isinstance(error, Blocked) else "error"
                         mark_failure(db, source.key, source.name, "feed", state,
                                      str(error) or type(error).__name__)

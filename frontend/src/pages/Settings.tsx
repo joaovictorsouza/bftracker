@@ -384,10 +384,104 @@ function Integrations() {
 
   return (
     <div className="space-y-4">
-      <Section title="Endereço público" hint="Usado nos links dos e-mails e do WhatsApp.">
+      <Section title="Endereço público" hint="Usado nos links dos e-mails, da extensão e do WhatsApp.">
         {input(["public_url", "URL do BFTracker", "https://ofertas.seudominio.com"])}
       </Section>
-      <Section title="E-mail (SMTP)" hint="Gmail exige uma senha de app.">
+      <Section
+        title="X (Twitter) — Monitoramento dos produtos cadastrados"
+        hint="Busca ofertas e cupons no X automaticamente para cada produto em Monitorados (em lotes econômicos com since_id) e em perfis de promoção. Sem chave da API, você também pode usar uma ponte RSS ou a extensão do navegador."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {input(["x_bearer_token", "Bearer Token (API v2)", "AAAAAAAAAAAAAAAAAAAA..."])}
+          {input([
+            "x_accounts",
+            "Perfis de ofertas no X (separados por vírgula)",
+            "pelandobr,promobitoficial,pechinchou,nerdofertas",
+          ])}
+          {input(["x_api_key", "API Key / Consumer Key (opcional)"])}
+          {input(["x_api_secret", "API Secret (opcional)"])}
+          <div className="sm:col-span-2">
+            {input([
+              "x_rss_search_url",
+              "URL RSS de busca opcional (com {query}, ex.: RSSHub / RSS-Bridge)",
+              "https://seu-rsshub.exemplo/twitter/keyword/{query}",
+            ])}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn-ghost mt-3"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              if (Object.keys(draft).length > 0) {
+                setData(await api.put<ServerSettings>("/admin/settings", { values: draft }));
+                setDraft({});
+              }
+              const res = await api.post<{ mode: string; sample_count: number }>("/admin/x/test");
+              alert(`X conectado (${res.mode}): ${res.sample_count} ofertas recentes encontradas para seus produtos.`);
+            }, "Conexão com X validada")
+          }
+        >
+          <Play className="size-4" /> Testar X agora
+        </button>
+      </Section>
+      <Section
+        title="Busca Web / Shopping opcional (Mercado Livre sem API oficial e OLX)"
+        hint="Opcional: uma chave gratuita do Serper.dev (Google Shopping + Busca Brasil) ou Brave Search pesquisa Mercado Livre, OLX, Magalu, Casas Bahia e Shopee diretamente sem depender da API oficial do Mercado Livre."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {input(["serper_api_key", "Chave Serper.dev (Google Shopping/Web)"])}
+          {input(["brave_api_key", "Chave Brave Search API (opcional)"])}
+        </div>
+        <button
+          type="button"
+          className="btn-ghost mt-3"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              if (Object.keys(draft).length > 0) {
+                setData(await api.put<ServerSettings>("/admin/settings", { values: draft }));
+                setDraft({});
+              }
+              const res = await api.post<{ count: number }>("/admin/websearch/test");
+              alert(`Busca Web respondeu com ${res.count} ofertas relevantes para PS5.`);
+            }, "Busca Web validada")
+          }
+        >
+          <Play className="size-4" /> Testar Busca Web
+        </button>
+      </Section>
+      <Section
+        title="Alertas por E-mail via IMAP (OLX, hardMOB, Google Alerts e ML)"
+        hint="Opcional e somente leitura (não marca seus e-mails como lidos): lê avisos instantâneos de buscas salvas na OLX, assinatura do fórum hardMOB Promoções, Google Alerts e Mercado Livre."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {input(["imap_host", "Servidor IMAP SSL", "imap.gmail.com"])}
+          {input(["imap_port", "Porta IMAP", "993"])}
+          {input(["imap_user", "Usuário / E-mail", "voce@gmail.com"])}
+          {input(["imap_password", "Senha ou senha de app"])}
+          {input(["imap_folder", "Pasta", "INBOX"])}
+        </div>
+        <button
+          type="button"
+          className="btn-ghost mt-3"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              if (Object.keys(draft).length > 0) {
+                setData(await api.put<ServerSettings>("/admin/settings", { values: draft }));
+                setDraft({});
+              }
+              const res = await api.post<{ checked: number; deals: number }>("/admin/imap/test");
+              alert(`IMAP conectado: ${res.checked} mensagens recentes inspecionadas (${res.deals} alertas de ofertas).`);
+            }, "Conexão IMAP validada")
+          }
+        >
+          <Play className="size-4" /> Testar IMAP
+        </button>
+      </Section>
+      <Section title="E-mail de envio (SMTP)" hint="Para o BFTracker enviar avisos por e-mail. Gmail exige uma senha de app.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {SMTP.map(input)}
           <Field label="Segurança">
@@ -423,7 +517,10 @@ function Integrations() {
           </>
         )}
       </Section>
-      <Section title="Mercado Livre (API oficial)" hint="Opcional, para busca direta (inclusive usados). Exige aplicativo aprovado em developers.mercadolivre.com.br.">
+      <Section
+        title="Mercado Livre (API oficial — opcional, não obrigatória)"
+        hint="Sem esta API, o BFTracker já acompanha o Mercado Livre via Gatry, Pelando, Promobit, Telegram, Busca Web, IMAP e Extensão do navegador."
+      >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {input(["ml_client_id", "Client ID"])}
           {input(["ml_client_secret", "Client Secret"])}

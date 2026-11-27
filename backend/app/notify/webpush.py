@@ -58,12 +58,14 @@ def ensure_keys(db: Session) -> tuple[str, str]:
 def _subject(db: Session, user: User) -> str:
     settings = get_settings()
     if settings.vapid_subject:
-        return settings.vapid_subject
-    public = get_value(db, "public_url")
+        return settings.vapid_subject.strip()
+    email = (settings.admin_email or user.email).strip()
+    if email:
+        return f"mailto:{email}"
+    public = get_value(db, "public_url").strip().rstrip("/")
     if public.startswith("https://"):
         return public
-    email = settings.admin_email or user.email
-    return f"mailto:{email}" if email else "mailto:admin@example.com"
+    return "mailto:admin@example.com"
 
 
 def send(db: Session, user: User, message: Message) -> None:

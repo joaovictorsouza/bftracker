@@ -595,6 +595,13 @@ async def run_watch(
     if watch is None:  # excluído durante a coleta
         return None
     summary = apply_results(db, watch, collected)
+    from .radar import backfill_watch_from_deals
+
+    radar_added = backfill_watch_from_deals(db, watch)
+    if radar_added:
+        collected.report["radar"] = {
+            "state": "ok", "name": "Radar (portais, canais e X)", "items": radar_added,
+        }
     watch.last_checked_at = utcnow()
     watch.last_report = {
         "sources": collected.report,

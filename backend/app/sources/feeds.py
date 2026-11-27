@@ -23,6 +23,9 @@ RSS_FEEDS: dict[str, tuple[str, str]] = {
     "adrenaline": ("Adrenaline", "https://www.adrenaline.com.br/feed/"),
     "mundoconectado": ("Mundo Conectado", "https://mundoconectado.com.br/feed/"),
     "meups": ("MeuPlayStation", "https://meups.com.br/feed/"),
+    "macmagazine": ("MacMagazine", "https://macmagazine.com.br/feed/"),
+    "tecmundo": ("TecMundo", "https://rss.tecmundo.com.br/feed"),
+    "olhardigital": ("Olhar Digital", "https://olhardigital.com.br/feed/"),
 }
 
 # canal -> nome (todos com prévia pública em https://t.me/s/<canal>)
@@ -39,6 +42,11 @@ TELEGRAM_CHANNELS: dict[str, str] = {
     "promotop": "PromoTop",
     "pcdofafapromo": "PC do Fafa Promoções",
     "ofertaskabum": "KaBuM! (Telegram)",
+    "boletando": "Boletando",
+    "promobit": "Ofertas PC Gamer & Hardware",
+    "linksbrazil": "LinksBR Promoções e Cupons",
+    "xetdaspromocoes": "Xet das Promoções",
+    "macmagazine": "MacMagazine (Telegram)",
     # o fórum recusa clientes automatizados; este canal (não oficial) replica as promoções
     "hardmob_promo": "hardMOB Promo",
 }

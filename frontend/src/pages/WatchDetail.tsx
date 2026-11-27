@@ -27,27 +27,41 @@ const STATE: Record<SourceReport["state"], [string, string]> = {
   unknown: ["bg-slate-400", "aguardando"],
 };
 
-/** Atalhos para conferir à mão os sites de usados (útil quando um deles bloqueia robôs). */
-function UsedLinks({ watch }: { watch: WatchDetail }) {
+/** Atalhos diretos para abrir (e capturar via extensão/favorito) ML, OLX, X e hardMOB. */
+function DirectLinks({ watch }: { watch: WatchDetail }) {
   const q = encodeURIComponent(watch.query);
   const area = watch.used_state ? `estado-${watch.used_state}` : "brasil";
   const slug = watch.query.trim().toLowerCase().replace(/\s+/g, "-");
-  const links = [
-    ["OLX", `https://www.olx.com.br/${area}?q=${q}&sf=1`],
-    ["Mercado Livre usados", `https://lista.mercadolivre.com.br/${encodeURIComponent(slug)}_ITEM*CONDITION_2230581`],
-    ["Enjoei", `https://www.enjoei.com.br/s?q=${q}`],
-    ["Facebook Marketplace", `https://www.facebook.com/marketplace/search/?query=${q}`],
+  const olxLimit = watch.used_max_price || watch.max_price;
+  const xExpr = `"${watch.query.trim()}" ("R$" OR cupom OR oferta OR promo) lang:pt`;
+  const links: [string, string][] = [
+    ["Mercado Livre", `https://lista.mercadolivre.com.br/${encodeURIComponent(slug)}_NoIndex_True`],
+    ...(watch.include_used
+      ? ([
+          [
+            "ML usados",
+            `https://lista.mercadolivre.com.br/${encodeURIComponent(slug)}_ITEM*CONDITION_2230581_NoIndex_True`,
+          ],
+          [
+            "OLX",
+            `https://www.olx.com.br/${area}?q=${q}&sf=1${olxLimit ? `&pe=${Math.round(olxLimit)}` : ""}`,
+          ],
+          ["Enjoei", `https://www.enjoei.com.br/s?q=${q}`],
+        ] as [string, string][])
+      : []),
+    ["🐦 X ao vivo", `https://x.com/search?q=${encodeURIComponent(xExpr)}&src=typed_query&f=live`],
+    ["🔥 hardMOB", "https://www.hardmob.com.br/forums/407-Promocoes"],
   ];
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
-      Abrir e capturar:
+      Busca direta / capturar:
       {links.map(([name, url]) => (
         <a key={name} className="chip !py-1.5 hover:border-accent" href={url} target="_blank" rel="noreferrer">
           {name} <ExternalLink className="size-3" />
         </a>
       ))}
       <Link to="/importar" className="font-semibold text-accent">
-        Como enviar os anúncios →
+        Extensão automática →
       </Link>
     </div>
   );
@@ -265,7 +279,7 @@ export function WatchDetailPage() {
         </select>
       </div>
 
-      {tab === "used" && data.kind === "product" && <UsedLinks watch={data} />}
+      {data.kind === "product" && <DirectLinks watch={data} />}
 
       {offers.length === 0 ? (
         <Empty icon={<RefreshCw />} title="Nenhuma oferta aqui">

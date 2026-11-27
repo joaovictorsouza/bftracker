@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import secrets
 import time
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .db import get_db
-from .models import User, utcnow
+from .models import ApiToken, User, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,28 @@ class LoginLimiter:
 limiter = LoginLimiter()
 
 
+def is_https_request(request: Request) -> bool:
+    """Detecta HTTPS direto ou atrás de Cloudflare / Traefik (Dokploy)."""
+    if request.url.scheme == "https":
+        return True
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    if proto == "https":
+        return True
+    cf_visitor = (request.headers.get("cf-visitor") or "").lower()
+    return '"https"' in cf_visitor
+
+
+def client_ip(request: Request) -> str:
+    """IP real do visitante atrás da Cloudflare e do proxy reverso do Dokploy."""
+    cf_ip = (request.headers.get("cf-connecting-ip") or "").strip()
+    if cf_ip:
+        return cf_ip[:64]
+    xff = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if xff:
+        return xff[:64]
+    return request.client.host if request.client else "?"
+
+
 def set_session_cookie(response: Response, request: Request, user: User) -> None:
     settings = get_settings()
     lifetime = timedelta(days=settings.session_days)
@@ -90,12 +113,37 @@ def set_session_cookie(response: Response, request: Request, user: User) -> None
         max_age=int(lifetime.total_seconds()),
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=is_https_request(request),
         path="/",
     )
 
 
+def hash_api_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_api_token() -> tuple[str, str, str]:
+    raw = f"bft_{secrets.token_urlsafe(28)}"
+    return raw, raw[:12], hash_api_token(raw)
+
+
 def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        raw_token = auth[7:].strip()
+        if not raw_token.startswith("bft_"):
+            raise HTTPException(401, "Chave de acesso inválida")
+        row = db.scalar(
+            select(ApiToken).where(ApiToken.token_hash == hash_api_token(raw_token))
+        )
+        if row is None or row.user is None:
+            raise HTTPException(401, "Chave de acesso inválida ou revogada")
+        now = utcnow()
+        if row.last_used_at is None or (now - row.last_used_at) > timedelta(seconds=60):
+            row.last_used_at = now
+            db.commit()
+        return row.user
+
     token = request.cookies.get(COOKIE)
     if not token:
         raise HTTPException(401, "Faça login para continuar")

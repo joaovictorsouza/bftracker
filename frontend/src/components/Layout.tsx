@@ -26,7 +26,7 @@ const NAV = [
   { to: "/cupons", label: "Cupons", icon: Ticket },
   { to: "/alertas", label: "Meus interesses", icon: Tags, desktop: true },
   { to: "/avisos", label: "Avisos", icon: Bell },
-  { to: "/importar", label: "Capturar do navegador", icon: BookmarkPlus, desktop: true },
+  { to: "/importar", label: "Extensão e captura", icon: BookmarkPlus, desktop: true },
   { to: "/configuracoes", label: "Configurações", icon: Settings, desktop: true },
 ];
 

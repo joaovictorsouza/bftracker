@@ -15,6 +15,15 @@ const KINDS = [
   ["bug", "🐞 Bugs"],
 ];
 
+const ORIGINS = [
+  ["", "Todas as origens"],
+  ["x", "🐦 X (Twitter)"],
+  ["portals", "🔥 Portais (Pelando, Gatry, Promobit, hardMOB)"],
+  ["telegram", "✈️ Telegram"],
+  ["rss", "📰 Sites RSS"],
+  ["email", "✉️ Alertas E-mail"],
+];
+
 export function Radar() {
   const meta = useMeta();
   const [params, setParams] = useSearchParams();
@@ -27,6 +36,7 @@ export function Radar() {
   const sequence = useRef(0);
 
   const kind = params.get("tipo") ?? "";
+  const origin = params.get("origem") ?? "";
   const category = params.get("categoria") ?? "";
   const store = params.get("loja") ?? "";
   const sort = params.get("ordem") ?? "recent";
@@ -55,7 +65,15 @@ export function Radar() {
     async (offset: number) => {
       const ticket = ++sequence.current;
       setLoading(true);
-      const query = new URLSearchParams({ q, category, store, kind, sort, offset: String(offset) });
+      const query = new URLSearchParams({
+        q,
+        category,
+        store,
+        kind,
+        origin,
+        sort,
+        offset: String(offset),
+      });
       try {
         const result = await api.get<{ items: Deal[]; next_offset: number | null }>(`/deals?${query}`);
         if (ticket !== sequence.current) return;
@@ -69,7 +87,7 @@ export function Radar() {
         if (ticket === sequence.current) setLoading(false);
       }
     },
-    [q, category, store, kind, sort],
+    [q, category, store, kind, origin, sort],
   );
 
   useEffect(() => {
@@ -114,7 +132,14 @@ export function Radar() {
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <select className="field" value={origin} onChange={(e) => set("origem", e.target.value)} aria-label="Origem">
+            {ORIGINS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
           <select className="field" value={category} onChange={(e) => set("categoria", e.target.value)} aria-label="Categoria">
             <option value="">Categorias</option>
             {meta?.categories.map((c) => (

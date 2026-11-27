@@ -12,6 +12,7 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --disable-pip-version-check -r requirements.txt
 COPY backend/app ./app
+COPY extension ./extension
 COPY --from=web /web/dist ./static
 RUN useradd --uid 10001 --no-create-home app && mkdir /data && chown app /data
 USER app

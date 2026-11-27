@@ -7,8 +7,10 @@ from statistics import median
 
 from .stores import trust_of
 
-SOURCE_PRIORITY = {"url": 0, "amazon": 1, "kabum": 1, "mercadolivre": 1, "olx": 1,
-                   "zoom": 3, "buscape": 4}
+SOURCE_PRIORITY = {
+    "url": 0, "amazon": 1, "kabum": 1, "mercadolivre": 1, "olx": 1,
+    "navegador": 1, "gatry": 2, "websearch": 2, "zoom": 3, "buscape": 4,
+}
 
 
 def offer_dict(offer) -> dict:

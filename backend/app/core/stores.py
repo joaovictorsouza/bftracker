@@ -8,7 +8,7 @@ Antes de comprar em lojas desconhecidas consulte a lista "Evite esses sites" do 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .text import normalize, slug
 
@@ -40,20 +40,22 @@ class Store:
 _RA = "https://www.reclameaqui.com.br/empresa/"
 
 STORES: tuple[Store, ...] = (
-    Store("amazon", "Amazon", TRUSTED, 92, ("amazon.com.br", "amzn.to"), ("amazon br",), True,
+    Store("amazon", "Amazon", TRUSTED, 92, ("amazon.com.br", "amzn.to", "a.co", "link.amazon"),
+          ("amazon br",), True,
           "Reputação Ótima (8,0) no Reclame Aqui. Em marketplace, confira o vendedor.",
           _RA + "amazon/"),
     Store("magalu", "Magazine Luiza", TRUSTED, 91,
-          ("magazineluiza.com.br", "magazinevoce.com.br", "magalu.com", "mgl.io"),
-          ("magalu", "magazine voce"), True,
+          ("magazineluiza.com.br", "magazinevoce.com.br", "magalu.com", "mgl.io",
+           "magazineluiza.onelink.me", "divulgador.magalu.com"),
+          ("magalu", "magazine voce", "magazineluiza"), True,
           "Reputação Ótima (8,2) no Reclame Aqui.", _RA + "magazine-luiza-loja-online/"),
     Store("kabum", "KaBuM!", TRUSTED, 90, ("kabum.com.br",), ("kabum",), True,
           "Reputação Ótima (8,0) no Reclame Aqui.", _RA + "kabum/"),
-    Store("fastshop", "Fast Shop", TRUSTED, 89, ("fastshop.com.br",), ("fast shop",), False,
+    Store("fastshop", "Fast Shop", TRUSTED, 89, ("fastshop.com.br",), ("fast shop", "fastshop"), False,
           "Reputação Ótima (8,2) no Reclame Aqui.", _RA + "fast-shop/"),
     Store("mercadolivre", "Mercado Livre", GOOD, 82,
           ("mercadolivre.com.br", "mercadolivre.com", "meli.la", "mercadolibre.com"),
-          ("ml", "mercado livre"), True,
+          ("ml", "meli", "mercado livre", "mercadolivre"), True,
           "Reputação Boa (7,6) no Reclame Aqui. Prefira lojas oficiais e Compra Garantida.",
           _RA + "mercado-livre/"),
     Store("casasbahia", "Casas Bahia", CAUTION, 55, ("casasbahia.com.br",), ("casas bahia",), True,
@@ -126,8 +128,38 @@ def find_by_name(name: str) -> Store | None:
     return None
 
 
+_TRACKER_HOSTS = (
+    "awin1.com", "lomadee.com", "admitad.com", "linksynergy.com", "rstyle.me",
+    "tidd.ly", "rakutenadvertising.com", "tradedoubler.com", "pelando.com.br",
+)
+
+
+def unwrap_url(url: str) -> str:
+    """Extrai o link final da loja quando envolvido em redirecionador de afiliado."""
+    current = (url or "").strip()
+    for _ in range(3):
+        parsed = urlparse(current)
+        host = (parsed.hostname or "").lower()
+        if not host or not any(host == t or host.endswith("." + t) for t in _TRACKER_HOSTS):
+            break
+        qs = parse_qs(parsed.query)
+        target = ""
+        for param in ("ued", "ulp", "url", "dl", "dest", "redirect", "murl"):
+            values = qs.get(param)
+            if values and values[0]:
+                candidate = unquote(values[0]).strip()
+                if candidate.startswith(("https://", "http://")):
+                    target = candidate
+                    break
+        if not target or target == current:
+            break
+        current = target
+    return current
+
+
 def find_by_url(url: str) -> Store | None:
-    host = (urlparse(url).hostname or "").lower()
+    resolved = unwrap_url(url)
+    host = (urlparse(resolved).hostname or "").lower()
     for store in STORES:
         for domain in store.domains:
             if host == domain or host.endswith("." + domain):
@@ -148,7 +180,7 @@ def find_in_text(text: str) -> Store | None:
             best = (at, store)
     if best:
         return best[1]
-    if value.startswith(" ml ") or " no ml " in value:
+    if value.startswith(" ml ") or " no ml " in value or " cupom ml " in value:
         return BY_KEY["mercadolivre"]
     return None
 

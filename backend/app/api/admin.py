@@ -25,6 +25,7 @@ from ..core.sourcestate import get_status
 from ..core.text import slug
 from ..db import get_db
 from ..models import (
+    ApiToken,
     Interest,
     Notification,
     PushSubscription,
@@ -36,8 +37,8 @@ from ..models import (
 from ..notify.whatsapp import PROVIDERS
 from ..schemas import CustomSourceIn, SettingsIn, ToggleIn, UserIn
 from ..security import admin_user, hash_password
-from ..sources import mlauth
-from ..sources.base import SourceError, assert_public_url
+from ..sources import imap_alerts, mlauth, websearch, x_twitter
+from ..sources.base import NotConfigured, SourceError, assert_public_url
 from ..sources.registry import feed_sources, store_sources
 from .auth import user_dict
 
@@ -73,13 +74,26 @@ def write_settings(data: SettingsIn, db: Session = Depends(get_db)):
         value = value.strip()
         if len(value) > 1000:
             raise HTTPException(422, f"Valor longo demais em {key}")
-        if key == "smtp_port" and value and not value.isdigit():
-            raise HTTPException(422, "A porta SMTP deve ser um número")
+        if key in ("smtp_port", "imap_port") and value and not value.isdigit():
+            raise HTTPException(422, f"A porta em {key} deve ser um número")
         if key == "whatsapp_provider" and value and value not in PROVIDERS:
             raise HTTPException(422, "Provedor de WhatsApp desconhecido")
         if key.endswith("_url") and value and not re.match(r"https?://", value):
             raise HTTPException(422, f"{key} deve começar com http:// ou https://")
+        if key == "x_rss_search_url" and value:
+            if "{query}" not in value:
+                raise HTTPException(422, "A URL RSS de busca deve conter {query}")
+            try:
+                assert_public_url(value.replace("{query}", "ps5"))
+            except SourceError as exc:
+                raise HTTPException(422, str(exc)) from exc
+        if key in ("x_api_key", "x_api_secret"):
+            set_value(db, "x_bearer_cache", "")
         set_value(db, key, value)
+    for src_key in ("x:watches", "x:accounts", "websearch", "imap:alerts"):
+        st = db.get(SourceStatus, src_key)
+        if st is not None:
+            st.blocked_until, st.failures = None, 0
     db.commit()
     return read_settings(db)
 
@@ -221,7 +235,7 @@ def delete_user(user_id: int, me: User = Depends(admin_user), db: Session = Depe
     for watch in db.scalars(select(Watch).where(Watch.user_id == user.id)):
         reset_offers(db, watch)
         db.delete(watch)
-    for model in (Interest, PushSubscription):
+    for model in (Interest, PushSubscription, ApiToken):
         for row in db.scalars(select(model).where(model.user_id == user.id)):
             db.delete(row)
     for row in db.scalars(select(Notification).where(Notification.user_id == user.id)):
@@ -335,3 +349,27 @@ def ml_disconnect(db: Session = Depends(get_db)):
     mlauth.disconnect(db)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/x/test")
+def x_test(db: Session = Depends(get_db)):
+    try:
+        return x_twitter.test_connection_sync(db)
+    except (NotConfigured, SourceError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/websearch/test")
+def websearch_test(db: Session = Depends(get_db)):
+    try:
+        return websearch.test_websearch_sync(db)
+    except (NotConfigured, SourceError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/imap/test")
+def imap_test(db: Session = Depends(get_db)):
+    try:
+        return imap_alerts.test_imap_sync(db)
+    except (NotConfigured, SourceError) as exc:
+        raise HTTPException(400, str(exc)) from exc

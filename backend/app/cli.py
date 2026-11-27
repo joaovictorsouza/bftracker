@@ -17,7 +17,7 @@ from .core import matching
 from .db import init_db, session_scope
 from .models import User
 from .security import MIN_PASSWORD, hash_password
-from .sources.base import Fetcher, SearchParams
+from .sources.base import Fetcher, NotConfigured, SearchParams
 from .sources.registry import feed_sources, store_sources
 
 
@@ -54,7 +54,7 @@ async def check_sources(query: str) -> int:
         query=query, include_used=True,
         is_relevant=lambda title: matching.matches(title, criteria),
     )
-    failures = 0
+    failures = optional = 0
     async with Fetcher() as fetcher:
 
         async def store(source):
@@ -63,23 +63,34 @@ async def check_sources(query: str) -> int:
                 offers = [o for o in offers if matching.matches(o.match_title or o.title, criteria)]
                 best = min(offers, key=lambda o: o.price, default=None)
                 sample = f" · menor R$ {best.price:.2f} ({best.store})" if best else ""
-                return True, f"loja  {source.key:22} {len(offers):4} ofertas{sample}"
+                return "ok", f"loja  {source.key:26} {len(offers):4} ofertas{sample}"
+            except NotConfigured as exc:
+                return "opt", f"loja  {source.key:26} OPCIONAL (não configurada): {exc}"
             except Exception as exc:  # noqa: BLE001
-                return False, f"loja  {source.key:22} FALHOU: {exc or type(exc).__name__}"
+                return "err", f"loja  {source.key:26} FALHOU: {exc or type(exc).__name__}"
 
         async def feed(source):
             try:
                 deals, coupons = await asyncio.wait_for(source.fetch(fetcher), 90)
-                return True, (f"radar {source.key:22} {len(deals):4} ofertas, "
+                return "ok", (f"radar {source.key:26} {len(deals):4} ofertas, "
                               f"{len(coupons)} cupons")
+            except NotConfigured as exc:
+                return "opt", f"radar {source.key:26} OPCIONAL (não configurada): {exc}"
             except Exception as exc:  # noqa: BLE001
-                return False, f"radar {source.key:22} FALHOU: {exc or type(exc).__name__}"
+                return "err", f"radar {source.key:26} FALHOU: {exc or type(exc).__name__}"
 
         jobs = [store(s) for s in stores] + [feed(s) for s in feeds]
-        for ok, line in await asyncio.gather(*jobs):
-            failures += not ok
+        for state, line in await asyncio.gather(*jobs):
+            if state == "err":
+                failures += 1
+            elif state == "opt":
+                optional += 1
             print(line)
-    print(f"\n{len(jobs) - failures} de {len(jobs)} fontes responderam")
+    active_total = len(jobs) - optional
+    print(
+        f"\n{active_total - failures} de {active_total} fontes ativas responderam "
+        f"({optional} opcionais aguardando chave)"
+    )
     return 0
 
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..models import (
     Coupon,
+    DailyBest,
     Deal,
     Interest,
     Notification,
@@ -26,7 +27,7 @@ from ..notify.dispatch import notify
 from ..sources.base import FoundCoupon, FoundDeal
 from . import matching, stores
 from .dealtext import CATEGORIES, category_of, classify, score_deal
-from .engine import criteria_of
+from .engine import criteria_of, today
 from .text import brl, clip, contains_term, normalize, short_hash, slug
 
 # só avisa sobre o que acabou de ser publicado
@@ -53,11 +54,12 @@ def _fingerprint(store_key: str, price: float | None, coupon: str, title: str) -
 
 def enrich(found: FoundDeal) -> Deal:
     info = classify(found.title, found.description)
-    link = found.link or ""
+    link = stores.unwrap_url(found.link or "")
     store = stores.find_by_name(found.store) if found.store else None
     store = (
         store
         or (stores.find_by_url(link) if link else None)
+        or (stores.find_by_url(found.url) if found.url else None)
         or stores.find_in_text(found.title)
         or stores.find_in_text(found.description[:400])
     )
@@ -222,6 +224,118 @@ def alert_deal(db: Session, deal: Deal) -> int:
     return sent
 
 
+def _upsert_deal_offer(db: Session, watch: Watch, deal: Deal) -> Offer | None:
+    """Registra no monitorado uma oferta com preço vinda do radar (Promobit, Pelando,
+    Gatry, HardMob, Telegram, X/Twitter, alertas de e-mail…)."""
+    if not deal.price or deal.price <= 0.05:
+        return None
+    if deal.is_coupon and deal.category == "cupons":
+        return None
+    if not deal.store_key and not deal.store and not deal.link:
+        return None
+    default_cond = "used" if deal.store_key == "olx" else "new"
+    condition = matching.detect_condition(deal.title, default_cond)
+    if condition != "new" and not watch.include_used:
+        return None
+    if not matching.matches(deal.title, criteria_of(watch), deal.price):
+        return None
+    known = db.scalar(
+        select(func.min(Offer.price)).where(
+            Offer.watch_id == watch.id, Offer.available, ~Offer.suspicious,
+            Offer.condition == "new",
+        )
+    )
+    if watch.min_price is None and known and deal.price < known * 0.3 and not deal.is_bug:
+        return None
+    suspicious = bool(
+        known and deal.price < known * (0.55 if condition == "new" else 0.35)
+    )
+    variant_key, variant_label = matching.variant_of(deal.title, watch.query)
+    src = f"radar:{deal.source}"[:40]
+    ext = deal.external_id[:200]
+    store_name = (deal.store or deal.source_name or "Radar")[:80]
+    store_key = (deal.store_key or slug(store_name))[:60]
+    target_url = stores.unwrap_url(deal.link or deal.url)
+    now = utcnow()
+    row = db.scalar(
+        select(Offer).where(
+            Offer.watch_id == watch.id, Offer.source == src, Offer.external_id == ext
+        )
+    )
+    if row is None:
+        row = Offer(
+            watch_id=watch.id, source=src, external_id=ext,
+            store=store_name, store_key=store_key, seller=deal.source_name[:120],
+            marketplace=store_key in {"mercadolivre", "olx", "shopee", "aliexpress", "enjoei"},
+            title=deal.title, url=target_url, image=deal.image,
+            price=deal.price, lowest_price=deal.price, original_price=deal.old_price,
+            coupon=deal.coupon[:200], condition=condition,
+            variant_key=variant_key, variant_label=variant_label,
+            suspicious=suspicious, available=True,
+            first_seen_at=deal.published_at or now, last_seen_at=now,
+        )
+        db.add(row)
+        db.flush()
+        db.add(PricePoint(offer_id=row.id, price=deal.price))
+    else:
+        if abs(deal.price - row.price) >= 0.01:
+            row.previous_price = row.price
+            row.price = deal.price
+            row.lowest_price = min(row.lowest_price, deal.price)
+            row.changed_at = now
+            db.add(PricePoint(offer_id=row.id, price=deal.price))
+        row.available = True
+        row.missed_runs = 0
+        row.last_seen_at = now
+        if deal.coupon:
+            row.coupon = deal.coupon[:200]
+        if deal.image and not row.image:
+            row.image = deal.image
+    if not row.suspicious and not row.hidden:
+        day = today()
+        daily = db.scalar(
+            select(DailyBest).where(
+                DailyBest.watch_id == watch.id, DailyBest.variant_key == variant_key,
+                DailyBest.condition == condition, DailyBest.day == day,
+            )
+        )
+        if daily is None:
+            db.add(DailyBest(watch_id=watch.id, variant_key=variant_key, condition=condition,
+                             day=day, price=row.price, store=row.store))
+        elif row.price < daily.price or daily.imported:
+            daily.price, daily.store, daily.imported = row.price, row.store, False
+    return row
+
+
+def sync_deal_to_watches(db: Session, deal: Deal) -> int:
+    if not deal.price or deal.price <= 0.05:
+        return 0
+    watches = db.scalars(select(Watch).where(Watch.active, Watch.kind == "product")).all()
+    matched = 0
+    for watch in watches:
+        if _upsert_deal_offer(db, watch, deal) is not None:
+            matched += 1
+    return matched
+
+
+def backfill_watch_from_deals(db: Session, watch: Watch, hours: int = 72) -> int:
+    """Aproveita ofertas recentes já colhidas no radar (ML, X, Pelando, Gatry, Promobit…)."""
+    if not watch.active or watch.kind != "product":
+        return 0
+    since = utcnow() - timedelta(hours=hours)
+    deals = db.scalars(
+        select(Deal)
+        .where(Deal.published_at >= since, Deal.price.is_not(None))
+        .order_by(Deal.published_at.desc())
+        .limit(800)
+    ).all()
+    added = 0
+    for deal in deals:
+        if _upsert_deal_offer(db, watch, deal) is not None:
+            added += 1
+    return added
+
+
 def ingest_deals(db: Session, found: list[FoundDeal], *, baseline: bool) -> dict:
     created = alerts = 0
     for item in found:
@@ -246,6 +360,7 @@ def ingest_deals(db: Session, found: list[FoundDeal], *, baseline: bool) -> dict
                 ),
                 published=deal.published_at,
             )
+        sync_deal_to_watches(db, deal)
         fresh = utcnow() - deal.published_at <= FRESH
         if fresh and not baseline:
             alerts += alert_deal(db, deal)

@@ -4,10 +4,57 @@ x-app: &app
   build: .
   image: bftracker:latest
   restart: unless-stopped
-  env_file: .env
+  env_file:
+    - path: .env
+      required: false
   environment:
     DATABASE_URL: postgresql+psycopg://bftracker:${POSTGRES_PASSWORD}@db:5432/bftracker
     DATA_DIR: /data
+    SECRET_KEY: ${SECRET_KEY:-}
+    ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+    ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8000}
+    VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
+    MIN_INTERVAL_MINUTES: ${MIN_INTERVAL_MINUTES:-5}
+    WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+    HOST_MIN_DELAY_SECONDS: ${HOST_MIN_DELAY_SECONDS:-2.5}
+    # E-mail (SMTP)
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-}
+    SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+    # WhatsApp
+    WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-}
+    WAHA_URL: ${WAHA_URL:-http://waha:3000}
+    WAHA_API_KEY: ${WAHA_API_KEY:-}
+    WAHA_SESSION: ${WAHA_SESSION:-default}
+    EVOLUTION_URL: ${EVOLUTION_URL:-}
+    EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+    EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-}
+    META_WA_TOKEN: ${META_WA_TOKEN:-}
+    META_WA_PHONE_ID: ${META_WA_PHONE_ID:-}
+    META_WA_TEMPLATE: ${META_WA_TEMPLATE:-}
+    WHATSAPP_WEBHOOK_URL: ${WHATSAPP_WEBHOOK_URL:-}
+    # X / Twitter, Busca Web e Alertas IMAP (também editáveis na interface)
+    X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
+    X_API_KEY: ${X_API_KEY:-}
+    X_API_SECRET: ${X_API_SECRET:-}
+    X_ACCOUNTS: ${X_ACCOUNTS:-pelandobr,promobitoficial,pechinchou,nerdofertas,achadosdotb,ofertasadrena,pcdofafa}
+    X_RSS_SEARCH_URL: ${X_RSS_SEARCH_URL:-}
+    SERPER_API_KEY: ${SERPER_API_KEY:-}
+    BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+    IMAP_HOST: ${IMAP_HOST:-}
+    IMAP_PORT: ${IMAP_PORT:-993}
+    IMAP_USER: ${IMAP_USER:-}
+    IMAP_PASSWORD: ${IMAP_PASSWORD:-}
+    IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
+    # Mercado Livre (API oficial, opcional)
+    ML_CLIENT_ID: ${ML_CLIENT_ID:-}
+    ML_CLIENT_SECRET: ${ML_CLIENT_SECRET:-}
   volumes:
     - app-data:/data
   security_opt:
@@ -27,9 +74,11 @@ services:
     environment:
       POSTGRES_USER: bftracker
       POSTGRES_DB: bftracker
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env (rode ./scripts/setup.sh)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD nas variaveis de ambiente do Dokploy}
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bftracker -d bftracker"]
       interval: 5s
@@ -39,9 +88,14 @@ services:
 
   app:
     <<: *app
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - internal
+      - dokploy-network
     healthcheck:
       test:
         - CMD
@@ -59,6 +113,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+    networks:
+      - internal
     healthcheck:
       test:
         - CMD
@@ -70,26 +126,7 @@ services:
       retries: 4
       start_period: 30s
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    depends_on:
-      app:
-        condition: service_healthy
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-      - "${HTTPS_PORT:-443}:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    logging: *logging
-
-  # WhatsApp pelo seu próprio número:  docker compose --profile whatsapp up -d
-  # Não publica portas: o pareamento (QR Code) é feito pela tela do BFTracker.
+  # Opcional — WhatsApp via QR Code próprio (ative se usar WHATSAPP_PROVIDER=waha):
   waha:
     image: ${WAHA_IMAGE:-devlikeapro/waha:latest}
     profiles: ["whatsapp"]
@@ -101,11 +138,17 @@ services:
       WHATSAPP_SWAGGER_ENABLED: "false"
     volumes:
       - waha-sessions:/app/.sessions
+    networks:
+      - internal
     logging: *logging
+
+networks:
+  internal:
+    driver: bridge
+  dokploy-network:
+    external: true
 
 volumes:
   db-data:
   app-data:
-  caddy-data:
-  caddy-config:
   waha-sessions:

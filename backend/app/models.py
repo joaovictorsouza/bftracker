@@ -315,3 +315,18 @@ class Heartbeat(Base):
     __tablename__ = "heartbeats"
     name: Mapped[str] = mapped_column(String(40), primary_key=True)
     at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class ApiToken(Base):
+    """Chave pessoal para a extensão do navegador (BFTracker Companion) e integrações."""
+
+    __tablename__ = "api_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80), default="Extensão do navegador")
+    prefix: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    user: Mapped[User] = relationship()

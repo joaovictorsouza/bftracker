@@ -1,7 +1,9 @@
-"""Anúncios capturados pelo navegador do próprio usuário (favorito "Enviar ao BFTracker").
+"""Anúncios e ofertas capturados pelo navegador do próprio usuário (extensão BFTracker
+Companion ou favorito "Enviar ao BFTracker").
 
-Serve para sites que recusam acesso automatizado, como OLX e Mercado Livre: a pessoa
-navega normalmente e envia a página que está vendo. Nada aqui acessa esses sites.
+Serve para sites que recusam acesso automatizado ou exigem sessão do usuário, como OLX,
+Mercado Livre, hardMOB e X (Twitter): a pessoa navega normalmente e envia o que está vendo,
+sem compartilhar cookies nem senhas.
 """
 
 from __future__ import annotations
@@ -13,9 +15,9 @@ from urllib.parse import urlsplit, urlunsplit
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import User, Watch
-from ..sources.base import FoundOffer
-from . import matching, stores
+from ..models import User, Watch, utcnow
+from ..sources.base import FoundDeal, FoundOffer
+from . import matching, radar, stores
 from .engine import Collected, apply_results
 from .text import normalize, short_hash, slug
 
@@ -28,6 +30,31 @@ class Item:
     condition: str = ""
     location: str = ""
     image: str = ""
+    original_price: float | None = None
+    installments: int | None = None
+    installment_value: float | None = None
+    interest_free: bool | None = None
+    free_shipping: bool | None = None
+    coupon: str = ""
+    seller: str = ""
+
+
+@dataclass
+class DealItem:
+    title: str
+    url: str
+    source: str = "navegador"
+    source_name: str = "Navegador"
+    external_id: str = ""
+    link: str = ""
+    description: str = ""
+    image: str = ""
+    store: str = ""
+    price: float | None = None
+    old_price: float | None = None
+    coupon: str = ""
+    is_coupon: bool = False
+    is_flash: bool = False
 
 
 def _source_and_id(url: str) -> tuple[str, str, str, str]:
@@ -41,7 +68,11 @@ def _source_and_id(url: str) -> tuple[str, str, str, str]:
         if ad:
             return "olx", ad.group(1), key, name
     if key == "mercadolivre":
-        ad = re.search(r"item_id[:=]+(MLB\d+)", url) or re.search(r"/(MLB)-?(\d{6,})", url)
+        ad = (
+            re.search(r"item_id[:=]+(MLB\d+)", url)
+            or re.search(r"/(MLB)-?(\d{6,})", url)
+            or re.search(r"/p/(MLB\d+)", url)
+        )
         if ad:
             return "mercadolivre", "".join(ad.groups()), key, name
     clean = urlunsplit((parts.scheme, host, parts.path, "", ""))
@@ -55,10 +86,73 @@ def to_offer(item: Item) -> FoundOffer:
         condition = "used"
     title = " ".join(re.sub(r"<[^>]{0,20}>", " ", item.title).split())
     condition = condition or matching.detect_condition(title)
+    original = (
+        item.original_price
+        if item.original_price and item.original_price > item.price
+        else None
+    )
+    card_price = (
+        round(item.installments * item.installment_value, 2)
+        if item.installments and item.installment_value
+        else None
+    )
     return FoundOffer(
-        source=source, external_id=external, store=store, store_key=store_key,
-        title=title, url=item.url, price=item.price, condition=condition,
-        location=item.location, image=item.image, marketplace=True,
+        source=source,
+        external_id=external,
+        store=store,
+        store_key=store_key,
+        seller=" ".join((item.seller or "").split())[:120],
+        title=title,
+        url=item.url,
+        price=item.price,
+        original_price=original,
+        card_price=card_price,
+        installments=item.installments,
+        installment_value=item.installment_value,
+        interest_free=item.interest_free,
+        free_shipping=item.free_shipping,
+        coupon=" ".join((item.coupon or "").split())[:200],
+        condition=condition,
+        location=item.location,
+        image=item.image,
+        marketplace=True,
+    )
+
+
+def to_deal(item: DealItem) -> FoundDeal:
+    title = " ".join(re.sub(r"<[^>]{0,20}>", " ", item.title).split())
+    ext = item.external_id.strip()
+    if not ext:
+        if m := re.search(r"/status/(\d+)", item.url):
+            ext = m.group(1)
+        elif m := re.search(r"threads/(\d+)", item.url):
+            ext = m.group(1)
+        else:
+            ext = short_hash(item.url, title)
+    source = item.source or "navegador"
+    source_name = item.source_name or "Navegador"
+    if "hardmob.com.br" in item.url.lower():
+        source, source_name = "hardmob", "hardMOB Promoções"
+    elif any(h in item.url.lower() for h in ("x.com/", "twitter.com/")):
+        source = "x_twitter"
+        if source_name == "Navegador":
+            source_name = "X (Twitter)"
+    return FoundDeal(
+        source=source,
+        source_name=source_name,
+        external_id=ext,
+        title=title,
+        url=item.url,
+        link=stores.unwrap_url(item.link) if item.link else "",
+        description=item.description,
+        image=item.image,
+        store=item.store,
+        price=item.price if item.price and item.price > 0 else None,
+        old_price=item.old_price if item.old_price and item.old_price > 0 else None,
+        coupon=item.coupon,
+        is_coupon=item.is_coupon or (bool(item.coupon) and not item.price),
+        is_flash=item.is_flash,
+        published_at=utcnow(),
     )
 
 
@@ -76,7 +170,12 @@ def _in_region(watch: Watch, offer: FoundOffer) -> bool:
     ) in normalize(offer.location)
 
 
-def import_items(db: Session, user: User, items: list[Item]) -> dict:
+def import_items(
+    db: Session,
+    user: User,
+    items: list[Item],
+    deals: list[DealItem] | None = None,
+) -> dict:
     offers = [to_offer(item) for item in items]
     watches = db.scalars(
         select(Watch).where(Watch.user_id == user.id, Watch.active, Watch.kind == "product")
@@ -103,5 +202,17 @@ def import_items(db: Session, user: User, items: list[Item]) -> dict:
             continue
         summary = apply_results(db, watch, collected)
         results.append({"id": watch.id, "name": watch.name, **summary})
-    db.commit()
-    return {"received": len(offers), "matched": len(used_ids), "watches": results}
+
+    deal_summary = None
+    if deals:
+        found_deals = [to_deal(d) for d in deals]
+        deal_summary = radar.ingest_deals(db, found_deals, baseline=False)
+    else:
+        db.commit()
+
+    out: dict = {"received": len(offers), "matched": len(used_ids), "watches": results}
+    if deal_summary is not None:
+        out["deals_received"] = len(deals or [])
+        out["deals_new"] = deal_summary["new"]
+        out["deals_alerts"] = deal_summary["alerts"]
+    return out

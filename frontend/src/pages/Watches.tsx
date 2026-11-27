@@ -1,4 +1,4 @@
-import { Pause, Plus, Target } from "lucide-react";
+import { ExternalLink, Pause, Plus, Target } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Sparkline } from "../components/Chart";
@@ -13,9 +13,22 @@ export function Watches() {
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
 
+  const productQueries = (data ?? [])
+    .filter((w) => w.active && w.kind === "product" && w.query)
+    .map((w) => `"${w.query.trim()}"`)
+    .slice(0, 8);
+  const xAllUrl = productQueries.length
+    ? `https://x.com/search?q=${encodeURIComponent(`(${productQueries.join(" OR ")}) ("R$" OR cupom OR oferta OR promo) lang:pt`)}&src=typed_query&f=live`
+    : "";
+
   return (
     <>
       <PageHeader title="Monitorados" subtitle="Seus produtos vigiados continuamente">
+        {xAllUrl && (
+          <a href={xAllUrl} target="_blank" rel="noreferrer" className="btn-ghost">
+            🐦 Ofertas no X <ExternalLink className="size-3.5" />
+          </a>
+        )}
         <button className="btn-primary" onClick={() => setCreating(true)}>
           <Plus className="size-4" /> Novo
         </button>

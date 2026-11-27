@@ -210,6 +210,11 @@ async def events(request: Request, user: User = Depends(current_user)):
                     yield ": ping\n\n"
 
     return StreamingResponse(
-        stream(), media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "CDN-Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
     )

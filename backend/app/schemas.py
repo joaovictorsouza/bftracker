@@ -169,14 +169,49 @@ class CustomSourceIn(BaseModel):
     value: str = Field(min_length=3, max_length=500)  # canal ou URL
 
 
+class TokenCreateIn(BaseModel):
+    name: str = Field(default="Extensão do navegador", min_length=1, max_length=80)
+
+
 class ImportItem(BaseModel):
     title: str = Field(min_length=2, max_length=300)
     url: str = Field(min_length=10, max_length=2000, pattern=r"^https://[^\s/@]+/\S*$")
     price: float = Field(gt=0, lt=10_000_000)
+    original_price: float | None = Field(default=None, ge=0, lt=10_000_000)
+    installments: int | None = Field(default=None, ge=1, le=48)
+    installment_value: float | None = Field(default=None, ge=0, lt=10_000_000)
+    interest_free: bool | None = None
+    free_shipping: bool | None = None
+    coupon: str = Field(default="", max_length=200)
+    seller: str = Field(default="", max_length=120)
     condition: str = Field(default="", max_length=12)
     location: str = Field(default="", max_length=160)
     image: str = Field(default="", max_length=2000, pattern=r"^(https://\S+)?$")
 
 
+class ImportDeal(BaseModel):
+    source: str = Field(default="navegador", max_length=40, pattern=r"^[a-z0-9_:\-]+$")
+    source_name: str = Field(default="Navegador", max_length=80)
+    external_id: str = Field(default="", max_length=240)
+    title: str = Field(min_length=2, max_length=350)
+    url: str = Field(min_length=10, max_length=2000, pattern=r"^https://[^\s/@]+/\S*$")
+    link: str = Field(default="", max_length=2000, pattern=r"^(https://[^\s/@]+/\S*)?$")
+    description: str = Field(default="", max_length=1500)
+    image: str = Field(default="", max_length=2000, pattern=r"^(https://\S+)?$")
+    store: str = Field(default="", max_length=80)
+    price: float | None = Field(default=None, ge=0, lt=10_000_000)
+    old_price: float | None = Field(default=None, ge=0, lt=10_000_000)
+    coupon: str = Field(default="", max_length=120)
+    is_coupon: bool = False
+    is_flash: bool = False
+
+
 class ImportIn(BaseModel):
-    items: list[ImportItem] = Field(min_length=1, max_length=100)
+    items: list[ImportItem] = Field(default_factory=list, max_length=100)
+    deals: list[ImportDeal] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def not_empty(self):
+        if not self.items and not self.deals:
+            raise ValueError("Envie ao menos um anúncio ou oferta")
+        return self
